@@ -5,6 +5,8 @@ export default function EmbedderConfigStep({ checkHealth }) {
     const [modelName, setModelName] = useState('all-MiniLM-L6-v2')
     const [rerankerModel, setRerankerModel] = useState('cross-encoder/ms-marco-MiniLM-L-6-v2')
     const [defaultChunkSize, setDefaultChunkSize] = useState(1500)
+    const [defaultOverlapSize, setDefaultOverlapSize] = useState(15)
+    const [typhoonApiKey, setTyphoonApiKey] = useState('')
     const [loading, setLoading] = useState(false)
     const [fetchLoading, setFetchLoading] = useState(true)
     const [response, setResponse] = useState(null)
@@ -32,6 +34,12 @@ export default function EmbedderConfigStep({ checkHealth }) {
                 if (res.data.default_chunk_size) {
                     setDefaultChunkSize(res.data.default_chunk_size)
                 }
+                if (res.data.default_overlap_size !== undefined) {
+                    setDefaultOverlapSize(res.data.default_overlap_size)
+                }
+                if (res.data.typhoon_api_key) {
+                    setTyphoonApiKey(res.data.typhoon_api_key)
+                }
             })
             .catch(err => console.error("Failed to fetch active embedder config", err))
             .finally(() => setFetchLoading(false))
@@ -44,7 +52,10 @@ export default function EmbedderConfigStep({ checkHealth }) {
         try {
             const res = await axios.post('/api/v1/config/embedder', {
                 model_name: modelName,
-                reranker_model: rerankerModel
+                reranker_model: rerankerModel,
+                default_chunk_size: parseInt(defaultChunkSize) || 1500,
+                default_overlap_size: parseInt(defaultOverlapSize) || 15,
+                typhoon_api_key: typhoonApiKey
             })
             setResponse({ error: false, data: res.data })
             if (checkHealth) checkHealth()
@@ -104,6 +115,31 @@ export default function EmbedderConfigStep({ checkHealth }) {
                             style={{ background: 'rgba(0,0,0,0.1)', color: 'inherit', padding: '12px', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '6px', width: '100%', fontFamily: 'inherit' }}
                         />
                         <span style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'block', marginTop: '4px' }}>This will be loaded as the default value when ingesting Knowledge Base documents.</span>
+                    </div>
+
+                    <div className="form-group" style={{ marginTop: '16px' }}>
+                        <label>Default Overlap Words</label>
+                        <input
+                            type="number"
+                            min="0"
+                            value={defaultOverlapSize}
+                            onChange={e => setDefaultOverlapSize(e.target.value)}
+                            required
+                            style={{ background: 'rgba(0,0,0,0.1)', color: 'inherit', padding: '12px', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '6px', width: '100%', fontFamily: 'inherit' }}
+                        />
+                        <span style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'block', marginTop: '4px' }}>This overlap size will be used as the default boundary context.</span>
+                    </div>
+
+                    <div className="form-group" style={{ marginTop: '16px' }}>
+                        <label>Typhoon OCR API Key (Optional)</label>
+                        <input
+                            type="password"
+                            value={typhoonApiKey}
+                            onChange={e => setTyphoonApiKey(e.target.value)}
+                            placeholder="Enter API Key to enable OCR preprocessing"
+                            style={{ background: 'rgba(0,0,0,0.1)', color: 'inherit', padding: '12px', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '6px', width: '100%', fontFamily: 'inherit' }}
+                        />
+                        <span style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'block', marginTop: '4px' }}>Required if you want to use the native Typhoon OCR prior to chunking PDFs.</span>
                     </div>
 
                     <div>

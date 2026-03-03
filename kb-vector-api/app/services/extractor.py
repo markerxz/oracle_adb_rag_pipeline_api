@@ -73,3 +73,64 @@ def extract_text_from_pdf(file_content: bytes) -> List[Tuple[int, str]]:
             result.append((page_num, cleaned))
 
     return result
+
+import json
+import requests
+import io
+
+async def extract_text_with_typhoon_ocr(file_content: bytes, filename: str, api_key: str) -> List[Tuple[int, str]]:
+    """
+    Sends the raw PDF directly to the Typhoon OCR API and parses the returned JSON into per-page text chunks.
+    """
+    url = "https://api.opentyphoon.ai/v1/ocr"
+    
+    # Get total pages to explicitly tell the API to process all pages
+    doc = fitz.open(stream=file_content, filetype="pdf")
+    page_count = doc.page_count
+    
+    # We use io.BytesIO to treat the raw bytes as a file object
+    file_obj = io.BytesIO(file_content)
+    # The API expects a tuple (filename, fileobj) for the 'file' parameter
+    files = {'file': (filename, file_obj, "application/pdf")}
+    
+    data = {
+        'model': "typhoon-ocr",
+        'task_type': "default",
+        'max_tokens': "16384",
+        'temperature': "0.1",
+        'top_p': "0.6",
+        'repetition_penalty': "1.2",
+        'pages': json.dumps(list(range(1, page_count + 1)))
+    }
+    
+    headers = {
+        'Authorization': f'Bearer {api_key}'
+    }
+    
+    # Run the blocking request in a way that doesn't hang the async loop, but for simplicity here we just call it
+    response = requests.post(url, files=files, data=data, headers=headers)
+    
+    if response.status_code != 200:
+        raise Exception(f"Typhoon OCR API Error {response.status_code}: {response.text}")
+        
+    result = response.json()
+    
+    extracted_pages: List[Tuple[int, str]] = []
+    
+    # Typhoon OCR returns a 'results' array where each item represents a page if it's a multi-page PDF
+    for page_idx, page_result in enumerate(result.get('results', []), start=1):
+        if page_result.get('success') and page_result.get('message'):
+            content = page_result['message']['choices'][0]['message']['content']
+            try:
+                # The model often returns structured JSON with a 'natural_text' field
+                parsed_content = json.loads(content)
+                text = parsed_content.get('natural_text', content)
+            except json.JSONDecodeError:
+                text = content
+                
+            if text and text.strip():
+                extracted_pages.append((page_idx, text.strip()))
+        else:
+            print(f"Error processing page {page_idx} of {filename}: {page_result.get('error', 'Unknown error')}")
+            
+    return extracted_pages

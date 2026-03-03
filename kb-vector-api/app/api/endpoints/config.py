@@ -271,6 +271,8 @@ class EmbedderConfigRequest(BaseModel):
     model_name: str
     reranker_model: str
     default_chunk_size: int = 1500
+    default_overlap_size: int = 15
+    typhoon_api_key: Optional[str] = None
 
 @router.get("/embedder")
 async def get_embedder_config():
@@ -278,7 +280,9 @@ async def get_embedder_config():
     return {
         "model_name": embedder.get_current_model_name(),
         "reranker_model": embedder.get_current_reranker_name(),
-        "default_chunk_size": settings.default_chunk_size
+        "default_chunk_size": settings.default_chunk_size,
+        "default_overlap_size": settings.default_overlap_size,
+        "typhoon_api_key": settings.typhoon_api_key
     }
 
 @router.post("/embedder")
@@ -295,13 +299,13 @@ async def update_embedder_config(config: EmbedderConfigRequest):
         
     try:
         # 1. Update .env file
-        env_content = f"EMBEDDER_MODEL={config.model_name}\nRERANKER_MODEL={config.reranker_model}\nDEFAULT_CHUNK_SIZE={config.default_chunk_size}\n"
+        env_content = f"EMBEDDER_MODEL={config.model_name}\nRERANKER_MODEL={config.reranker_model}\nDEFAULT_CHUNK_SIZE={config.default_chunk_size}\nDEFAULT_OVERLAP_SIZE={config.default_overlap_size}\nTYPHOON_API_KEY={config.typhoon_api_key or ''}\n"
         if os.path.exists(settings.Config.env_file):
             with open(settings.Config.env_file, "r") as f:
                 lines = f.readlines()
             
             # Remove existing overrides
-            lines = [l for l in lines if not l.startswith("EMBEDDER_MODEL=") and not l.startswith("RERANKER_MODEL=") and not l.startswith("DEFAULT_CHUNK_SIZE=")]
+            lines = [l for l in lines if not l.startswith("EMBEDDER_MODEL=") and not l.startswith("RERANKER_MODEL=") and not l.startswith("DEFAULT_CHUNK_SIZE=") and not l.startswith("DEFAULT_OVERLAP_SIZE=") and not l.startswith("TYPHOON_API_KEY=")]
             lines.append(env_content)
             
             with open(settings.Config.env_file, "w") as f:
@@ -314,6 +318,8 @@ async def update_embedder_config(config: EmbedderConfigRequest):
         settings.embedder_model = config.model_name
         settings.reranker_model = config.reranker_model
         settings.default_chunk_size = config.default_chunk_size
+        settings.default_overlap_size = config.default_overlap_size
+        settings.typhoon_api_key = config.typhoon_api_key
         embedder.setup_embedder(config.model_name, config.reranker_model)
         
         return {"message": f"Successfully loaded embedder model {config.model_name}"}

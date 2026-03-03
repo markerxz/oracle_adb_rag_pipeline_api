@@ -12,7 +12,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Knowledge Base & Vector Search API",
     description="API for ingesting unstructured documents, generating vector embeddings, and semantic searching via Oracle DB.",
-    version="1.2.1",
+    version="1.3.0-beta",
     lifespan=lifespan
 )
 

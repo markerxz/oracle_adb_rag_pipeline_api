@@ -6,6 +6,7 @@ import OciConfigStep from './components/OciConfigStep'
 import EmbedderConfigStep from './components/EmbedderConfigStep'
 import KnowledgeBaseStep from './components/KnowledgeBaseStep'
 import IngestDocumentStep from './components/IngestDocumentStep'
+import IngestDocumentV2Step from './components/IngestDocumentV2Step'
 import VectorSearchStep from './components/VectorSearchStep'
 import ManageDocumentsStep from './components/ManageDocumentsStep'
 import './App.css'
@@ -38,8 +39,9 @@ function App() {
     { id: 3, title: 'Embedder Config', subtitle: 'POST /config/embedder', icon: Database }, /* Fallback icon */
     { id: 4, title: 'Knowledge Base', subtitle: 'POST /kbs', icon: FolderTree },
     { id: 5, title: 'Ingest Document', subtitle: 'POST /documents', icon: FileUp },
-    { id: 6, title: 'Vector Search', subtitle: 'POST /search', icon: Search },
-    { id: 7, title: 'Manage Data', subtitle: 'GET /documents', icon: Files }
+    { id: 6, title: 'Ingest Document v2', subtitle: 'POST /documents (OCR)', icon: FileUp },
+    { id: 7, title: 'Vector Search', subtitle: 'POST /search', icon: Search },
+    { id: 8, title: 'Manage Data', subtitle: 'GET /documents', icon: Files }
   ]
 
   const renderActiveStep = () => {
@@ -49,8 +51,9 @@ function App() {
       case 3: return <EmbedderConfigStep checkHealth={checkHealth} />
       case 4: return <KnowledgeBaseStep />
       case 5: return <IngestDocumentStep />
-      case 6: return <VectorSearchStep />
-      case 7: return <ManageDocumentsStep />
+      case 6: return <IngestDocumentV2Step />
+      case 7: return <VectorSearchStep />
+      case 8: return <ManageDocumentsStep />
       default: return <DatabaseConfigStep />
     }
   }
