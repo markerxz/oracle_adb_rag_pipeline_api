@@ -66,55 +66,40 @@ Full auto-generated API documentation available at `/docs`.
 ### Prerequisites
 - Oracle Autonomous Database 23ai (with VECTOR support)
 - OCI tenancy with Object Storage bucket configured
+- Your **Oracle Wallet `.zip`** downloaded from OCI Console → Autonomous DB → Database Connection → Download Wallet
 - Python 3.9+, Node.js 18+
 
-### Backend Setup
-
-1. Clone the repo:
-   ```bash
-   git clone https://github.com/markerxz/oracle_adb_rag_pipeline_api.git
-   cd oracle_adb_rag_pipeline_api
-   ```
-
-2. Set up the Python environment:
-   ```bash
-   cd kb-vector-api
-   python3 -m venv .venv
-   source .venv/bin/activate
-   pip install -r requirements.txt
-   ```
-
-3. Configure environment variables by creating a `.env` file (see `.env.example`):
-   ```env
-   DB_USER=ADMIN
-   DB_PASSWORD=<your_oracle_password>
-   DB_DSN=<your_tns_alias>
-   OCI_BUCKET_NAME=<your_bucket_name>
-   EMBEDDER_MODEL=all-MiniLM-L6-v2
-   RERANKER_MODEL=cross-encoder/ms-marco-MiniLM-L-6-v2
-   ```
-
-4. Place your Oracle Wallet in a `wallet/` directory (excluded from git) and configure `DB_CONFIG_DIR` to point to it.
-
-5. Initialize the database schema:
-   ```bash
-   python init_db.py  # run once
-   ```
-
-6. Start the API:
-   ```bash
-   uvicorn app.main:app --host 0.0.0.0 --port 8000
-   ```
-
-### Frontend Setup
+### Automated Setup (One Command)
 
 ```bash
-cd kb-vector-ui
-npm install
-npm run dev -- --host
+git clone https://github.com/markerxz/oracle_adb_rag_pipeline_api.git
+cd oracle_adb_rag_pipeline_api
+chmod +x setup.sh && ./setup.sh
 ```
 
-The UI is accessible at `http://localhost:5173`.
+The `setup.sh` script will automatically:
+1. **Prompt** for your Oracle DB credentials and OCI bucket name
+2. **Generate** `kb-vector-api/.env` with your credentials
+3. **Extract** your Oracle Wallet zip into `wallet/`
+4. **Install** Python dependencies in a virtual environment
+5. **Download** the AI embedding and reranking models from HuggingFace
+6. **Install** React frontend dependencies
+
+### Running the Application
+
+After setup, start the backend:
+```bash
+cd kb-vector-api && source .venv/bin/activate
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+Start the frontend (in a separate terminal):
+```bash
+cd kb-vector-ui && npm run dev -- --host
+```
+
+- **UI**: `http://localhost:5173`
+- **Swagger API Docs**: `http://localhost:8000/docs`
 
 ---
 
