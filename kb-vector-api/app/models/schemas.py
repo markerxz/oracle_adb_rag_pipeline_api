@@ -34,6 +34,7 @@ class ChunkResponse(BaseModel):
     chunk_text: str
     document_id: str
     document_filename: str
+    page_number: Optional[int] = None
 
 class SearchQuery(BaseModel):
     kb_id: str = Field(..., description="The highly specific ID of the Knowledge Base to search within.")

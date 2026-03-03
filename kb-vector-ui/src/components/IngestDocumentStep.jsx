@@ -6,14 +6,14 @@ export default function IngestDocumentStep() {
     const [kbs, setKbs] = useState([])
     const [selectedKb, setSelectedKb] = useState('')
     const [pdfFile, setPdfFile] = useState(null)
-    const [chunkSize, setChunkSize] = useState(1500)
+    const [chunkSize, setChunkSize] = useState(500)
+    const [overlapSize, setOverlapSize] = useState(15)
     const [loading, setLoading] = useState(false)
     const [response, setResponse] = useState(null)
     const [previewLoading, setPreviewLoading] = useState(false)
     const [previewData, setPreviewData] = useState(null)
 
     useEffect(() => {
-        // Fetch KBs to populate the dropdown
         axios.get('/api/v1/kbs')
             .then(res => {
                 if (res.data.length > 0) {
@@ -23,12 +23,9 @@ export default function IngestDocumentStep() {
             })
             .catch(err => console.error("Failed to load KBs for upload select", err))
 
-        // Fetch default chunk size configuration
         axios.get('/api/v1/config/embedder')
             .then(res => {
-                if (res.data.default_chunk_size) {
-                    setChunkSize(res.data.default_chunk_size)
-                }
+                if (res.data.default_chunk_size) setChunkSize(res.data.default_chunk_size)
             })
             .catch(err => console.error("Failed to load global config", err))
     }, [])
@@ -39,12 +36,12 @@ export default function IngestDocumentStep() {
             setResponse({ error: true, data: "Please select a KB and upload a PDF." })
             return
         }
-
         setPreviewLoading(true)
         setResponse(null)
         const form = new FormData()
         form.append('file', pdfFile)
         form.append('chunk_size', chunkSize)
+        form.append('overlap_size', overlapSize)
 
         try {
             const res = await axios.post('/api/v1/documents/preview', form, {
@@ -59,28 +56,33 @@ export default function IngestDocumentStep() {
     }
 
     const handleSubmit = async () => {
-        if (!pdfFile || !selectedKb) return;
-
-        setPreviewData(null) // Close modal
+        if (!pdfFile || !selectedKb) return
+        setPreviewData(null)
         setLoading(true)
         const form = new FormData()
         form.append('file', pdfFile)
         form.append('kb_id', selectedKb)
         form.append('chunk_size', chunkSize)
+        form.append('overlap_size', overlapSize)
 
         try {
             const res = await axios.post('/api/v1/documents', form, {
                 headers: { 'Content-Type': 'multipart/form-data' }
             })
             setResponse({ error: false, data: res.data })
-            setPdfFile(null) // Reset file on success
-            // Note: intentionally reset chunk size to 50? No, let user keep it.
+            setPdfFile(null)
         } catch (err) {
             setResponse({ error: true, data: err.response?.data?.detail || err.message })
         } finally {
             setLoading(false)
         }
     }
+
+    const pageBadge = (pageNum) => pageNum != null ? (
+        <span style={{ display: 'inline-block', fontSize: '10px', fontWeight: 600, background: 'rgba(99,179,237,0.15)', color: '#63b3ed', border: '1px solid rgba(99,179,237,0.3)', borderRadius: '4px', padding: '1px 6px', marginLeft: '6px', letterSpacing: '0.04em' }}>
+            pg {pageNum}
+        </span>
+    ) : null
 
     return (
         <section className="step-section">
@@ -89,16 +91,15 @@ export default function IngestDocumentStep() {
                 <span className="api-badge post">POST /api/v1/documents</span>
             </div>
             <div className="glass-card">
-                <p className="description">Upload a PDF. The API will store it in Object Storage, extract text via PyMuPDF, chunk it, and generate vector embeddings inside Oracle Database.</p>
+                <p className="description">
+                    Upload a PDF. The API extracts text via PyMuPDF (with header/footer cleaning), chunks it with
+                    configurable overlap to preserve cross-boundary context, and generates vector embeddings stored in Oracle Database.
+                </p>
 
                 <form onSubmit={handlePreview} className="dynamic-form">
                     <div className="form-group">
                         <label>Target Knowledge Base</label>
-                        <select
-                            value={selectedKb}
-                            onChange={e => setSelectedKb(e.target.value)}
-                            required
-                        >
+                        <select value={selectedKb} onChange={e => setSelectedKb(e.target.value)} required>
                             {kbs.length === 0 && <option value="" disabled>No Knowledge Bases found. Create one first.</option>}
                             {kbs.map(kb => (
                                 <option key={kb.id} value={kb.id}>{kb.name} ({kb.id.substring(0, 8)}...)</option>
@@ -106,16 +107,37 @@ export default function IngestDocumentStep() {
                         </select>
                     </div>
 
-                    <div className="form-group">
-                        <label>Max Words per Chunk</label>
-                        <input
-                            type="number"
-                            min="10"
-                            value={chunkSize}
-                            onChange={e => setChunkSize(parseInt(e.target.value))}
-                            required
-                            style={{ background: 'rgba(0,0,0,0.1)', color: 'inherit', padding: '12px', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '6px', width: '100%', fontFamily: 'inherit' }}
-                        />
+                    {/* Chunking controls — side by side */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                Max Words / Chunk
+                                <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 400 }}>(context window)</span>
+                            </label>
+                            <input
+                                type="number" min="20" max="2000"
+                                value={chunkSize}
+                                onChange={e => setChunkSize(parseInt(e.target.value))}
+                                required
+                                style={{ background: 'rgba(0,0,0,0.1)', color: 'inherit', padding: '12px', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '6px', width: '100%', fontFamily: 'inherit' }}
+                            />
+                        </div>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                Overlap Words
+                                <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 400 }}>(boundary context)</span>
+                            </label>
+                            <input
+                                type="number" min="0" max="100"
+                                value={overlapSize}
+                                onChange={e => setOverlapSize(parseInt(e.target.value))}
+                                required
+                                style={{ background: 'rgba(0,0,0,0.1)', color: 'inherit', padding: '12px', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '6px', width: '100%', fontFamily: 'inherit' }}
+                            />
+                            <span style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px', display: 'block' }}>
+                                ≈ {chunkSize > 0 ? Math.round(overlapSize / chunkSize * 100) : 0}% overlap
+                            </span>
+                        </div>
                     </div>
 
                     <div className="form-group">
@@ -135,12 +157,9 @@ export default function IngestDocumentStep() {
                                 )}
                             </label>
                             <input
-                                id="file-upload"
-                                type="file"
-                                accept="application/pdf"
+                                id="file-upload" type="file" accept="application/pdf"
                                 onChange={e => setPdfFile(e.target.files[0])}
-                                required
-                                style={{ display: 'none' }}
+                                required style={{ display: 'none' }}
                             />
                         </div>
                     </div>
@@ -159,21 +178,26 @@ export default function IngestDocumentStep() {
                         ) : (
                             <div>
                                 <h4 style={{ color: 'var(--accent-primary)', marginBottom: '12px' }}>{response.data.message}</h4>
-                                <div style={{ display: 'flex', gap: '16px', marginBottom: '16px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                                <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginBottom: '16px', fontSize: '13px', color: 'var(--text-secondary)' }}>
                                     <span><strong>Document ID:</strong> {response.data.document_id?.substring(0, 8)}...</span>
                                     <span><strong>OCI Object:</strong> {response.data.oci_object_name}</span>
                                     {response.data.chunking_config && (
-                                        <span><strong>Chunking:</strong> {response.data.chunking_config.strategy} (Max {response.data.chunking_config.max})</span>
+                                        <span>
+                                            <strong>Chunking:</strong> {response.data.chunking_config.strategy} &nbsp;|&nbsp;
+                                            Max {response.data.chunking_config.max_words} words &nbsp;|&nbsp;
+                                            {response.data.chunking_config.overlap_words} word overlap
+                                        </span>
                                     )}
                                 </div>
-
-                                {response.data.chunks && response.data.chunks.length > 0 && (
+                                {response.data.chunks?.length > 0 && (
                                     <div style={{ marginTop: '20px' }}>
-                                        <h5 style={{ marginBottom: '12px', color: 'var(--text-primary)' }}>Generated Text Chunks ({response.data.chunks_processed})</h5>
+                                        <h5 style={{ marginBottom: '12px' }}>Generated Chunks ({response.data.chunks_processed})</h5>
                                         <div style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', padding: '12px', background: 'rgba(0,0,0,0.2)' }}>
                                             {response.data.chunks.map(chunk => (
                                                 <div key={chunk.chunk_id} style={{ marginBottom: '16px', paddingBottom: '16px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                                                    <span style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Chunk {chunk.chunk_id}</span>
+                                                    <span style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                                        Chunk {chunk.chunk_id} {pageBadge(chunk.page_number)}
+                                                    </span>
                                                     <p style={{ fontSize: '14px', lineHeight: '1.5', margin: 0 }}>{chunk.text}</p>
                                                 </div>
                                             ))}
@@ -194,20 +218,24 @@ export default function IngestDocumentStep() {
                             <span style={{ color: 'var(--accent-primary)' }}>📄</span> Chunk Preview Review
                         </h3>
 
-                        <div style={{ display: 'flex', gap: '16px', marginBottom: '20px', fontSize: '13px', color: 'var(--text-secondary)' }}>
-                            <span><strong>Target Chunk Size:</strong> Max {previewData.chunking_config.max} words</span>
-                            <span><strong>Generated Chunks:</strong> {previewData.chunks_processed}</span>
+                        <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', marginBottom: '20px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                            <span><strong>Strategy:</strong> {previewData.chunking_config?.strategy}</span>
+                            <span><strong>Max Words:</strong> {previewData.chunking_config?.max_words}</span>
+                            <span><strong>Overlap:</strong> {previewData.chunking_config?.overlap_words} words</span>
+                            <span><strong>Total Chunks:</strong> {previewData.chunks_processed}</span>
                         </div>
 
                         <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '16px', lineHeight: 1.5 }}>
-                            This is a live preview of how Oracle Dictionary will slice your document. If you think the chunks are too large or too small to capture semantic meaning, click Cancel and adjust the chunk slider.
-                            No vectors have been generated yet.
+                            Preview of how your document will be chunked with <strong>{previewData.chunking_config?.overlap_words}-word overlap</strong> between boundaries.
+                            Each chunk badge shows its source page. No vectors generated yet — click <strong>Confirm & Vectorize!</strong> to proceed.
                         </p>
 
                         <div style={{ overflowY: 'auto', flex: 1, padding: '16px', background: 'rgba(0,0,0,0.3)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)', marginBottom: '24px' }}>
                             {previewData.chunks.map(chunk => (
                                 <div key={chunk.chunk_id} style={{ marginBottom: '16px', paddingBottom: '16px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                                    <span style={{ fontSize: '11px', color: 'var(--accent-secondary)', display: 'block', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Chunk {chunk.chunk_id}</span>
+                                    <span style={{ fontSize: '11px', color: 'var(--accent-secondary)', display: 'block', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                        Chunk {chunk.chunk_id} {pageBadge(chunk.page_number)}
+                                    </span>
                                     <p style={{ fontSize: '14px', lineHeight: '1.6', margin: 0, color: 'var(--text-primary)' }}>{chunk.text}</p>
                                 </div>
                             ))}
@@ -225,7 +253,6 @@ export default function IngestDocumentStep() {
                 </div>,
                 document.body
             )}
-
         </section>
     )
 }

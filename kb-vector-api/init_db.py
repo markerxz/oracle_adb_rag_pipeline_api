@@ -63,7 +63,8 @@ def init_db():
                 document_id VARCHAR2(36),
                 kb_id VARCHAR2(36) NOT NULL,
                 chunk_text CLOB NOT NULL,
-                chunk_vector VECTOR(384, FLOAT32),
+                chunk_vector VECTOR(*, FLOAT32),
+                page_number NUMBER,
                 PRIMARY KEY (document_id, chunk_id),
                 CONSTRAINT fk_document
                     FOREIGN KEY (document_id)

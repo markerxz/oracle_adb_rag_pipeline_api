@@ -3,6 +3,7 @@ from fastapi.responses import Response
 from typing import List
 from app.models.schemas import DocumentResponse
 from app.services import storage, database
+from app.api.endpoints import search as search_module
 import urllib.parse
 
 router = APIRouter()
@@ -125,13 +126,13 @@ async def delete_document(document_id: str):
     conn = database.get_db_connection()
     cursor = conn.cursor()
     
-    # Locate document OCI string
-    cursor.execute("SELECT oci_object_name FROM DOCUMENTS WHERE id = :id", {'id': document_id})
+    # Locate document OCI string and KB ID
+    cursor.execute("SELECT oci_object_name, kb_id FROM DOCUMENTS WHERE id = :id", {'id': document_id})
     row = cursor.fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Document not found.")
         
-    oci_object_name = row[0]
+    oci_object_name, kb_id = row[0], row[1]
     
     try:
         # 1. Delete OCI object
@@ -150,5 +151,8 @@ async def delete_document(document_id: str):
     finally:
         cursor.close()
         conn.close()
+
+    # Invalidate BM25 cache so next search rebuilds without deleted doc
+    search_module.invalidate_bm25_cache(kb_id)
         
     return {"message": f"Successfully deleted document {document_id}"}

@@ -319,3 +319,69 @@ async def update_embedder_config(config: EmbedderConfigRequest):
         return {"message": f"Successfully loaded embedder model {config.model_name}"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to load or save model: {e}")
+
+
+# ---------------------------------------------------------------------------
+# VERSION & CHANGELOG
+# ---------------------------------------------------------------------------
+import re as _re
+
+CHANGELOG_PATH = os.path.join(os.getcwd(), "CHANGELOG.md")
+
+def _parse_changelog() -> list:
+    """Parse CHANGELOG.md into a structured list of version entries."""
+    try:
+        with open(os.path.abspath(CHANGELOG_PATH), "r", encoding="utf-8") as f:
+            content = f.read()
+    except FileNotFoundError:
+        return []
+
+    entries = []
+    # Split on version headers: ## [X.Y.Z] — YYYY-MM-DD
+    blocks = _re.split(r'\n(?=## \[\d+\.\d+\.\d+\])', content.strip())
+
+    for block in blocks:
+        header_match = _re.match(r'## \[(\d+\.\d+\.\d+)\] — (\d{4}-\d{2}-\d{2})', block)
+        if not header_match:
+            continue
+
+        version_str = header_match.group(1)
+        date_str = header_match.group(2)
+        sections = {}
+
+        # Parse each ### section
+        section_blocks = _re.split(r'\n(?=### )', block)
+        for section in section_blocks[1:]:  # skip header block
+            section_match = _re.match(r'### (.+)\n([\s\S]*)', section)
+            if section_match:
+                section_name = section_match.group(1).strip()
+                items_raw = section_match.group(2).strip()
+                # Extract bullet items
+                items = [
+                    _re.sub(r'`[^`]+`', lambda m: m.group(0), line.lstrip("- ").strip())
+                    for line in items_raw.splitlines()
+                    if line.strip().startswith("- ")
+                ]
+                sections[section_name] = items
+
+        entries.append({
+            "version": version_str,
+            "date": date_str,
+            "sections": sections
+        })
+
+    return entries
+
+
+@router.get("/version")
+async def get_version():
+    """
+    Returns the current API version and the full structured changelog.
+    """
+    from app.main import app as _app
+    changelog = _parse_changelog()
+    return {
+        "version": _app.version,
+        "changelog": changelog
+    }
+
