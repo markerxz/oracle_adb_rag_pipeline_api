@@ -3,8 +3,38 @@ from app.services import storage, extractor, embedder, database
 from datetime import datetime
 import oracledb
 import uuid
+import re
 
 router = APIRouter()
+
+def chunk_text_by_words(text: str, max_words: int):
+    # Split text into sentences
+    sentences = re.split(r'(?<=[.!?])\s+', text)
+    chunks = []
+    current_chunk = []
+    current_words = 0
+    
+    for sentence in sentences:
+        word_count = len(sentence.split())
+        if current_words + word_count > max_words and current_chunk:
+            chunks.append(" ".join(current_chunk))
+            current_chunk = []
+            current_words = 0
+            
+        # If a single sentence is larger than max_words, we need to split it by words
+        if word_count > max_words:
+            words = sentence.split()
+            for i in range(0, len(words), max_words):
+                chunks.append(" ".join(words[i:i+max_words]))
+        else:
+            current_chunk.append(sentence)
+            current_words += word_count
+            
+    if current_chunk:
+        chunks.append(" ".join(current_chunk))
+        
+    return chunks
+
 
 @router.post("/preview")
 async def preview_document_chunks(
@@ -17,50 +47,26 @@ async def preview_document_chunks(
     """
     contents = await file.read()
     
-    # Oracle natively maxes at 1000 words per chunk for its C text processor logic
-    chunk_size = min(chunk_size, 1000)
-    
     # Extract Text
     pdf_text = extractor.extract_text_from_pdf(contents)
     
-    conn = database.get_db_connection()
-    cursor = conn.cursor()
+    # Run Chunking in Python memory
+    raw_chunks = chunk_text_by_words(pdf_text, chunk_size)
     
-    try:
-        # Run Chunking (Oracle DB VECTOR_CHUNKS) in memory
-        cursor.setinputsizes(rec_text=oracledb.DB_TYPE_CLOB)
-        preview_sql = f"""
-            SELECT vc.chunk_offset, vc.chunk_text
-            FROM (SELECT :rec_text AS txt FROM dual) s,
-                 VECTOR_CHUNKS(
-                    dbms_vector_chain.utl_to_text(s.txt) 
-                    BY words MAX {chunk_size} OVERLAP 0 
-                    SPLIT BY sentence LANGUAGE american NORMALIZE all
-                 ) vc
-        """
-        cursor.execute(preview_sql, {'rec_text': pdf_text})
-        
-        chunks = cursor.fetchall()
-        
-        response_chunks = []
-        for cid, ctext in chunks:
-            text = ctext.read() if hasattr(ctext, 'read') else ctext
-            response_chunks.append({
-                "chunk_id": cid,
-                "text": text
-            })
-            
-    finally:
-        cursor.close()
-        conn.close()
+    response_chunks = []
+    for i, text in enumerate(raw_chunks, 1):
+        response_chunks.append({
+            "chunk_id": i,
+            "text": text
+        })
         
     return {
         "message": "Chunk Preview generated successfully",
         "chunking_config": {
-            "strategy": "WORDS",
+            "strategy": "PYTHON_WORDS",
             "max": chunk_size
         },
-        "chunks_processed": len(chunks),
+        "chunks_processed": len(raw_chunks),
         "chunks": response_chunks
     }
 
@@ -88,9 +94,6 @@ async def upload_document(
 
     contents = await file.read()
     
-    # Oracle natively maxes at 1000 words per chunk for its C text processor logic
-    chunk_size = min(chunk_size, 1000)
-    
     # 1. Upload Original File to OCI Object Storage
     oci_object_name = storage.upload_document(contents, file.filename)
     
@@ -110,38 +113,23 @@ async def upload_document(
             'udate': datetime.now(), 'oname': oci_object_name
         })
         
-        # 4. Chunking (Oracle DB VECTOR_CHUNKS)
-        cursor.setinputsizes(rec_text=oracledb.DB_TYPE_CLOB)
-        insert_sql = f"""
-            INSERT /*+ NO_PARALLEL */ INTO DOCUMENT_CHUNKS (chunk_id, document_id, kb_id, chunk_text)
-            SELECT vc.chunk_offset, :doc_id, :kb_id, vc.chunk_text
-            FROM (SELECT :rec_text AS txt FROM dual) s,
-                 VECTOR_CHUNKS(
-                    dbms_vector_chain.utl_to_text(s.txt) 
-                    BY words MAX {chunk_size} OVERLAP 0 
-                    SPLIT BY sentence LANGUAGE american NORMALIZE all
-                 ) vc
-        """
-        cursor.execute(insert_sql, {'doc_id': doc_id, 'kb_id': kb_id, 'rec_text': pdf_text})
-        
-        # 5. Embedding
-        cursor.execute("SELECT chunk_id, chunk_text FROM DOCUMENT_CHUNKS WHERE document_id = :doc_id", {'doc_id': doc_id})
-        chunks = cursor.fetchall()
+        # 4. Chunking using Python Logic instead of constrained Oracle Algorithms
+        raw_chunks = chunk_text_by_words(pdf_text, chunk_size)
         
         response_chunks = []
-        for cid, ctext in chunks:
-            text = ctext.read() if hasattr(ctext, 'read') else ctext
+        for i, text in enumerate(raw_chunks, 1):
             response_chunks.append({
-                "chunk_id": cid,
+                "chunk_id": i,
                 "text": text
             })
+            
+            # 5. Embedding Natively to the target Knowledge Base lock
             vec_str = embedder.get_embedding_string(text, override_model=kb_embedder)
             
             cursor.execute("""
-                UPDATE DOCUMENT_CHUNKS 
-                   SET chunk_vector = TO_VECTOR(:vec)
-                 WHERE document_id = :doc_id AND chunk_id = :cid
-            """, {'doc_id': doc_id, 'cid': cid, 'vec': vec_str})
+                INSERT INTO DOCUMENT_CHUNKS (chunk_id, document_id, kb_id, chunk_vector, chunk_text)
+                VALUES (:cid, :doc_id, :kb_id, TO_VECTOR(:vec), :txt)
+            """, {'cid': i, 'doc_id': doc_id, 'kb_id': kb_id, 'vec': vec_str, 'txt': text})
         
         conn.commit()
     except Exception as e:
@@ -158,9 +146,9 @@ async def upload_document(
         "document_id": doc_id,
         "oci_object_name": oci_object_name,
         "chunking_config": {
-            "strategy": "WORDS",
+            "strategy": "PYTHON_WORDS",
             "max": chunk_size
         },
-        "chunks_processed": len(chunks),
+        "chunks_processed": len(raw_chunks),
         "chunks": response_chunks
     }

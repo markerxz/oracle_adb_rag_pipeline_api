@@ -270,21 +270,23 @@ from pydantic import BaseModel
 class EmbedderConfigRequest(BaseModel):
     model_name: str
     reranker_model: str
+    default_chunk_size: int = 1500
 
 @router.get("/embedder")
 async def get_embedder_config():
     """Returns the currently active Vector Embedding LLM model."""
     return {
         "model_name": embedder.get_current_model_name(),
-        "reranker_model": embedder.get_current_reranker_name()
+        "reranker_model": embedder.get_current_reranker_name(),
+        "default_chunk_size": settings.default_chunk_size
     }
 
 @router.post("/embedder")
 async def update_embedder_config(config: EmbedderConfigRequest):
     """Updates the Vector Embedding LLM model and reloads it into memory."""
     # Validate it's a known lightweight model for safety to prevent massive downloads crashing the VM
-    allowed_embedders = ["all-MiniLM-L6-v2", "all-mpnet-base-v2", "paraphrase-multilingual-MiniLM-L12-v2", "Qwen/Qwen3-Embedding-0.6B"]
-    allowed_rerankers = ["cross-encoder/ms-marco-MiniLM-L-6-v2", "BAAI/bge-reranker-base", "Qwen/Qwen3-Reranker-0.6B"]
+    allowed_embedders = ["all-MiniLM-L6-v2", "all-mpnet-base-v2", "paraphrase-multilingual-MiniLM-L12-v2"]
+    allowed_rerankers = ["cross-encoder/ms-marco-MiniLM-L-6-v2", "BAAI/bge-reranker-base"]
     
     if config.model_name not in allowed_embedders:
         raise HTTPException(status_code=400, detail=f"Embedder Model must be one of: {', '.join(allowed_embedders)}")
@@ -293,13 +295,13 @@ async def update_embedder_config(config: EmbedderConfigRequest):
         
     try:
         # 1. Update .env file
-        env_content = f"EMBEDDER_MODEL={config.model_name}\nRERANKER_MODEL={config.reranker_model}\n"
+        env_content = f"EMBEDDER_MODEL={config.model_name}\nRERANKER_MODEL={config.reranker_model}\nDEFAULT_CHUNK_SIZE={config.default_chunk_size}\n"
         if os.path.exists(settings.Config.env_file):
             with open(settings.Config.env_file, "r") as f:
                 lines = f.readlines()
             
             # Remove existing overrides
-            lines = [l for l in lines if not l.startswith("EMBEDDER_MODEL=") and not l.startswith("RERANKER_MODEL=")]
+            lines = [l for l in lines if not l.startswith("EMBEDDER_MODEL=") and not l.startswith("RERANKER_MODEL=") and not l.startswith("DEFAULT_CHUNK_SIZE=")]
             lines.append(env_content)
             
             with open(settings.Config.env_file, "w") as f:
@@ -311,6 +313,7 @@ async def update_embedder_config(config: EmbedderConfigRequest):
         # 2. Update runtime settings & reload models
         settings.embedder_model = config.model_name
         settings.reranker_model = config.reranker_model
+        settings.default_chunk_size = config.default_chunk_size
         embedder.setup_embedder(config.model_name, config.reranker_model)
         
         return {"message": f"Successfully loaded embedder model {config.model_name}"}

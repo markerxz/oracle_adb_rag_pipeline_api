@@ -1,0 +1,57 @@
+# ========================
+# Oracle Wallet / Credentials
+# ========================
+wallet/
+*.pem
+*.p12
+*.sso
+*.jks
+*.ora
+*.properties
+
+# ========================
+# Environment Variables
+# ========================
+.env
+.env.*
+!.env.example
+
+# ========================
+# Python
+# ========================
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+
+# ========================
+# Node / Frontend
+# ========================
+node_modules/
+kb-vector-ui/dist/
+kb-vector-ui/.vite/
+
+# ========================
+# Test & Dev Scripts
+# ========================
+test_*.py
+setup_db.py
+init_db.py
+update_db.py
+build_nb.py
+fix_nb.py
+append_pdf_nb.py
+update_clob.py
+load_model.py
+
+# ========================
+# OS / IDE
+# ========================
+.DS_Store
+.idea/
+.vscode/
+*.swp
