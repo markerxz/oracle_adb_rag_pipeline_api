@@ -1,19 +1,18 @@
-# 🧠 Oracle ADB RAG Pipeline — KB Vector
+# 🧠 KB Vector — Oracle RAG Pipeline
 
-> **Version 1.1** — A production-ready Retrieval-Augmented Generation (RAG) API pipeline powered by Oracle Autonomous Database, OCI Object Storage, and Sentence Transformers.
+A production-ready **Retrieval-Augmented Generation (RAG)** pipeline built on Oracle Autonomous Database 23ai. Upload PDF documents, generate semantic vector embeddings, and run state-of-the-art hybrid search — all through a clean React UI or REST API.
 
 ---
 
-## 📌 What is this?
+## ✨ Features
 
-This is a full-stack **Knowledge Base (KB) and Vector Search API** platform. It allows you to:
-
-- Upload PDF documents into isolated **Knowledge Bases**
-- Automatically chunk, embed into semantic vectors, and store them in **Oracle VECTOR columns**
-- Run **state-of-the-art hybrid search** (Dense Vector + Sparse BM25 + Cross-Encoder Reranking) over the ingested documents
-- Manage everything through a clean **React web interface** or directly via a **Swagger RESTful API**
-
-This system is designed as the backbone for RAG pipelines — feeding retrieved context chunks directly into LLMs for grounded, document-aware answers.
+| Feature | Description |
+|---|---|
+| 📁 **Multi-Collection KBs** | Isolated Knowledge Bases, each with a locked embedding model for vector space consistency |
+| 📄 **Unlimited Chunking** | Custom Python regex splitter — no Oracle word limits. Configurable chunk size from the UI |
+| 🔍 **Hybrid Search** | Dense Vector + BM25 Sparse merged via Reciprocal Rank Fusion (RRF), then Cross-Encoder reranked |
+| 🗑 **Full KB Deletion** | One click — cascades across Oracle DB and OCI Object Storage |
+| 🌐 **Swagger UI** | Auto-generated interactive API docs at `/docs` |
 
 ---
 
@@ -27,49 +26,21 @@ User Query ──► Dense Vector Search ─┐                         │
                                    ─┘
 ```
 
-| Component | Technology |
+| Layer | Technology |
 |---|---|
-| **Backend API** | FastAPI + Uvicorn (Python 3.9) |
+| **API** | FastAPI + Uvicorn |
 | **Database** | Oracle Autonomous Database 23ai |
 | **Object Storage** | OCI Object Storage |
-| **Dense Embedder** | `all-MiniLM-L6-v2` (SentenceTransformers) |
-| **Sparse Retrieval** | BM25 (rank_bm25) |
-| **Cross-Encoder Reranker** | `cross-encoder/ms-marco-MiniLM-L-6-v2` |
-| **Frontend UI** | React + Vite |
+| **Embedder** | `all-MiniLM-L6-v2` (SentenceTransformers) |
+| **Sparse Search** | BM25 (`rank_bm25`) |
+| **Reranker** | `cross-encoder/ms-marco-MiniLM-L-6-v2` |
+| **Frontend** | React + Vite |
 
 ---
 
-## ✨ Key Features
+## 🚀 Quick Start
 
-### 📁 Multi-Collection Knowledge Bases
-Create separate isolated knowledge bases. Each KB locks in its Dense Embedding Model at creation time — ensuring vector space consistency even if you later change the default embedder.
-
-### 📄 Unlimited Document Chunking
-Unlike Oracle's native `VECTOR_CHUNKS` which caps at ~1000 words, this pipeline uses a **Python regex-based splitter** with intelligent sentence boundaries. Configure the default chunk size (words) freely from the UI.
-
-### 🔍 Hybrid Search (Dense + Sparse + Reranker)
-1. **Dense Vector Search** — Top 50 via Oracle `VECTOR_DISTANCE` (Cosine)
-2. **BM25 Sparse Keyword Search** — Top 50 in-memory via `rank_bm25`
-3. **Reciprocal Rank Fusion (RRF)** — Merges both lists into top 10 candidates
-4. **Cross-Encoder Reranking** — Fine-grained semantic reranking before returning top-K results
-
-### 🗑 Full KB Deletion
-Delete a Knowledge Base in one click — cascades to remove all associated documents, vector chunks from Oracle, and original PDFs from OCI Object Storage.
-
-### 🌐 Interactive Swagger UI
-Full auto-generated API documentation available at `/docs`.
-
----
-
-## 🚀 Getting Started
-
-### Prerequisites
-- Oracle Autonomous Database 23ai (with VECTOR support)
-- OCI tenancy with Object Storage bucket configured
-- Your **Oracle Wallet `.zip`** downloaded from OCI Console → Autonomous DB → Database Connection → Download Wallet
-- Python 3.9+, Node.js 18+
-
-### Automated Setup (One Command)
+**Prerequisites:** Python 3.9+, Node.js 18+, Oracle ADB 23ai, OCI tenancy, and your [Oracle Wallet `.zip`](https://docs.oracle.com/en-us/iaas/autonomous-database-shared/doc/connect-download-customer-managed-wallet.html) downloaded from OCI Console.
 
 ```bash
 git clone https://github.com/markerxz/oracle_adb_rag_pipeline_api.git
@@ -77,40 +48,37 @@ cd oracle_adb_rag_pipeline_api
 chmod +x setup.sh && ./setup.sh
 ```
 
-The `setup.sh` script will automatically:
-1. **Prompt** for your Oracle DB credentials and OCI bucket name
-2. **Generate** `kb-vector-api/.env` with your credentials
-3. **Extract** your Oracle Wallet zip into `wallet/`
-4. **Install** Python dependencies in a virtual environment
-5. **Download** the AI embedding and reranking models from HuggingFace
-6. **Install** React frontend dependencies
+`setup.sh` will interactively:
+- Prompt for your Oracle DB and OCI credentials → generate `.env`
+- Extract your Wallet zip → `wallet/`
+- Install Python dependencies and download AI models
+- Install React frontend dependencies
 
-### Running the Application
-
-After setup, start the backend:
+**Run the API:**
 ```bash
 cd kb-vector-api && source .venv/bin/activate
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
-Start the frontend (in a separate terminal):
+**Run the UI** (separate terminal):
 ```bash
 cd kb-vector-ui && npm run dev -- --host
 ```
 
-- **UI**: `http://localhost:5173`
-- **Swagger API Docs**: `http://localhost:8000/docs`
+| Service | URL |
+|---|---|
+| React UI | `http://localhost:5173` |
+| Swagger Docs | `http://localhost:8000/docs` |
 
 ---
 
-## 📡 API Endpoints
+## 📡 API Reference
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/docs` | Interactive Swagger UI |
 | `GET` | `/api/v1/config/health` | Health check (DB + OCI) |
-| `POST` | `/api/v1/config/embedder` | Update default embedder/chunk config |
-| `POST` | `/api/v1/kbs` | Create a new Knowledge Base |
+| `POST` | `/api/v1/config/embedder` | Update embedder / chunk size config |
+| `POST` | `/api/v1/kbs` | Create a Knowledge Base |
 | `GET` | `/api/v1/kbs` | List all Knowledge Bases |
 | `DELETE` | `/api/v1/kbs/{kb_id}` | Delete KB (cascades DB + OCI) |
 | `POST` | `/api/v1/documents` | Upload & vectorize a PDF |
@@ -122,17 +90,6 @@ cd kb-vector-ui && npm run dev -- --host
 
 ---
 
-## 🔐 Security Notes
+## 📦 Stack
 
-- **Never commit your Oracle Wallet or `.env` files.** Both are listed in `.gitignore`.
-- Use environment variables or secrets management for all credentials in production.
-
----
-
-## 📦 Tech Stack
-
-- `fastapi`, `uvicorn`, `pydantic-settings`
-- `sentence-transformers`, `rank-bm25`
-- `oracledb`, `oci`
-- `pymupdf` (PDF parsing)
-- `react`, `vite`, `axios`
+`fastapi` · `uvicorn` · `pydantic-settings` · `sentence-transformers` · `rank-bm25` · `oracledb` · `oci` · `pymupdf` · `react` · `vite` · `axios`
