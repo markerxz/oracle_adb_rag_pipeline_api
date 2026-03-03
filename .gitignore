@@ -2,12 +2,15 @@
 # Oracle Wallet / Credentials
 # ========================
 wallet/
+Wallet_*.zip
+*.zip
 *.pem
 *.p12
 *.sso
 *.jks
 *.ora
 *.properties
+*.onnx
 
 # ========================
 # Environment Variables
