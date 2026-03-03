@@ -1,6 +1,10 @@
 import oracledb
 from app.core.config import settings
 
+# Drastically improves performance by fetching CLOBs directly as strings 
+# instead of requiring a separate network roundtrip per locator.
+oracledb.defaults.fetch_lobs = False
+
 # Global Connection Pool
 pool = None
 

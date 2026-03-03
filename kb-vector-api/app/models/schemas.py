@@ -11,6 +11,9 @@ class KBBase(BaseModel):
 class KBResponse(KBBase):
     id: str
     created_at: datetime
+    embedding_model: str
+    chunk_count: int = 0
+    documents: List[dict] = []
 
 # --- Document Schemas ---
 
@@ -28,14 +31,19 @@ class ChunkResponse(BaseModel):
     rank: int
     chunk_id: int
     distance: float
-    text: str
+    chunk_text: str
+    document_id: str
+    document_filename: str
 
 class SearchQuery(BaseModel):
     kb_id: str = Field(..., description="The highly specific ID of the Knowledge Base to search within.")
     query_text: str = Field(..., description="The natural language question to search the knowledge base for.")
     top_k: int = Field(3, description="Number of results to return.")
+    reranker_model: Optional[str] = Field(None, description="Optional Cross-Encoder model override for this specific search.")
 
 class SearchResponse(BaseModel):
     kb_id: str
     query: str
+    embedding_model: str
+    reranker_model: str
     results: List[ChunkResponse]

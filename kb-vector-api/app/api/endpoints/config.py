@@ -129,7 +129,7 @@ async def initialize_database_tables():
                     document_id VARCHAR2(36),
                     kb_id VARCHAR2(36) NOT NULL,
                     chunk_text CLOB NOT NULL,
-                    chunk_vector VECTOR(384, FLOAT32),
+                    chunk_vector VECTOR(*, FLOAT32),
                     PRIMARY KEY (document_id, chunk_id),
                     CONSTRAINT fk_document
                         FOREIGN KEY (document_id)
@@ -150,3 +150,169 @@ async def initialize_database_tables():
         return {"message": f"Database tables initialized. Tables created: {', '.join(tables_created) if tables_created else 'None'}"}
     except Exception as e:
          raise HTTPException(status_code=500, detail=f"Failed to initialize Oracle DB tables: {str(e)}")
+
+@router.post("/oci")
+async def configure_oci(
+    user_ocid: str = Form(..., description="The OCI User OCID"),
+    tenancy_ocid: str = Form(..., description="The OCI Tenancy OCID"),
+    fingerprint: str = Form(..., description="The API Key Fingerprint"),
+    region: str = Form(..., description="The OCI Region (e.g. us-ashburn-1)"),
+    oci_bucket_name: str = Form(..., description="The OCI Bucket Name for storing PDFs"),
+    private_key: UploadFile = File(..., description="The oci_api_key.pem file")
+):
+    """
+    Configure the OCI Object Storage connection dynamically by uploading the PEM key and providing OCI credentials.
+    """
+    oci_dir = os.path.dirname(settings.oci_config_file)
+    os.makedirs(oci_dir, exist_ok=True)
+    
+    key_path = os.path.join(oci_dir, "oci_api_key.pem")
+    
+    try:
+        with open(key_path, "wb") as buffer:
+            shutil.copyfileobj(private_key.file, buffer)
+        
+        # Ensure correct permissions for the private key
+        os.chmod(key_path, 0o600)
+        
+        # Write the OCI config file
+        config_content = f"""[DEFAULT]
+user={user_ocid}
+fingerprint={fingerprint}
+tenancy={tenancy_ocid}
+region={region}
+key_file={key_path}
+"""
+        with open(settings.oci_config_file, "w") as f:
+            f.write(config_content)
+            
+        os.chmod(settings.oci_config_file, 0o600)
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to process OCI configuration: {e}")
+        
+    # Update running settings and .env
+    settings.oci_bucket_name = oci_bucket_name
+    env_path = "/etc/kb-vector-api/.env"
+    try:
+        existing_lines = []
+        if os.path.exists(env_path):
+            with open(env_path, "r") as f:
+                existing_lines = f.readlines()
+        
+        with open(env_path, "w") as f:
+            for line in existing_lines:
+                if not line.startswith("OCI_BUCKET_NAME="):
+                    f.write(line)
+            f.write(f'OCI_BUCKET_NAME="{settings.oci_bucket_name}"\n')
+    except Exception as e:
+        print(f"Warning: Could not save .env to {env_path}: {e}")
+
+    return {"message": "OCI Object Storage Configuration saved successfully!"}
+
+@router.get("/health")
+async def get_system_health():
+    """
+    Actively test the connections to both the Oracle Database and OCI Object Storage.
+    """
+    health = {
+        "database": False,
+        "oci": False,
+        "errors": []
+    }
+    
+    # 1. Test Oracle DB
+    try:
+        conn = database.get_db_connection()
+        c = conn.cursor()
+        c.execute("SELECT 1 FROM dual")
+        c.close()
+        conn.close()
+        health["database"] = True
+    except Exception as e:
+        health["errors"].append(f"DB Error: {str(e)}")
+
+    # 2. Test OCI Storage
+    try:
+        from app.services.storage import get_object_storage_client
+        client, tenancy = get_object_storage_client()
+        # A simple namespace fetch proves auth works
+        client.get_namespace(compartment_id=tenancy)
+        health["oci"] = True
+    except Exception as e:
+        health["errors"].append(f"OCI Error: {str(e)}")
+
+    return health
+
+@router.get("/status")
+async def get_config_status():
+    """
+    Check the current configuration status of the backend without exposing sensitive credentials.
+    """
+    db_configured = bool(settings.db_user and settings.db_password and settings.db_dsn and os.path.exists(settings.wallet_dir))
+    oci_configured = os.path.exists(settings.oci_config_file)
+    
+    return {
+        "database": {
+            "configured": db_configured,
+            "dsn": settings.db_dsn if db_configured else None,
+            "user": settings.db_user if db_configured else None
+        },
+        "oci": {
+            "configured": oci_configured,
+            "bucket_name": settings.oci_bucket_name if oci_configured else None
+        }
+    }
+
+from app.services import embedder
+from pydantic import BaseModel
+
+class EmbedderConfigRequest(BaseModel):
+    model_name: str
+    reranker_model: str
+
+@router.get("/embedder")
+async def get_embedder_config():
+    """Returns the currently active Vector Embedding LLM model."""
+    return {
+        "model_name": embedder.get_current_model_name(),
+        "reranker_model": embedder.get_current_reranker_name()
+    }
+
+@router.post("/embedder")
+async def update_embedder_config(config: EmbedderConfigRequest):
+    """Updates the Vector Embedding LLM model and reloads it into memory."""
+    # Validate it's a known lightweight model for safety to prevent massive downloads crashing the VM
+    allowed_embedders = ["all-MiniLM-L6-v2", "all-mpnet-base-v2", "paraphrase-multilingual-MiniLM-L12-v2", "Qwen/Qwen3-Embedding-0.6B"]
+    allowed_rerankers = ["cross-encoder/ms-marco-MiniLM-L-6-v2", "BAAI/bge-reranker-base", "Qwen/Qwen3-Reranker-0.6B"]
+    
+    if config.model_name not in allowed_embedders:
+        raise HTTPException(status_code=400, detail=f"Embedder Model must be one of: {', '.join(allowed_embedders)}")
+    if config.reranker_model not in allowed_rerankers:
+        raise HTTPException(status_code=400, detail=f"Reranker Model must be one of: {', '.join(allowed_rerankers)}")
+        
+    try:
+        # 1. Update .env file
+        env_content = f"EMBEDDER_MODEL={config.model_name}\nRERANKER_MODEL={config.reranker_model}\n"
+        if os.path.exists(settings.Config.env_file):
+            with open(settings.Config.env_file, "r") as f:
+                lines = f.readlines()
+            
+            # Remove existing overrides
+            lines = [l for l in lines if not l.startswith("EMBEDDER_MODEL=") and not l.startswith("RERANKER_MODEL=")]
+            lines.append(env_content)
+            
+            with open(settings.Config.env_file, "w") as f:
+                f.writelines(lines)
+        else:
+            with open(settings.Config.env_file, "w") as f:
+                f.write(env_content)
+                
+        # 2. Update runtime settings & reload models
+        settings.embedder_model = config.model_name
+        settings.reranker_model = config.reranker_model
+        embedder.setup_embedder(config.model_name, config.reranker_model)
+        
+        return {"message": f"Successfully loaded embedder model {config.model_name}"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to load or save model: {e}")

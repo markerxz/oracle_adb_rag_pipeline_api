@@ -51,7 +51,7 @@ export default function ManageDocumentsStep() {
     return (
         <section className="step-section">
             <div className="section-header">
-                <h2>5. Manage Documents</h2>
+                <h2>7. Manage Documents</h2>
                 <div>
                     <span className="api-badge get" style={{ marginRight: '8px' }}>GET /api/v1/documents</span>
                     <span className="api-badge delete">DEL /api/v1/documents/&#123;id&#125;</span>

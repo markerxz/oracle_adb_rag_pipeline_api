@@ -6,7 +6,7 @@ export default function IngestDocumentStep() {
     const [kbs, setKbs] = useState([])
     const [selectedKb, setSelectedKb] = useState('')
     const [pdfFile, setPdfFile] = useState(null)
-    const [chunkSize, setChunkSize] = useState(50)
+    const [chunkSize, setChunkSize] = useState(1500)
     const [loading, setLoading] = useState(false)
     const [response, setResponse] = useState(null)
     const [previewLoading, setPreviewLoading] = useState(false)
@@ -22,6 +22,15 @@ export default function IngestDocumentStep() {
                 }
             })
             .catch(err => console.error("Failed to load KBs for upload select", err))
+
+        // Fetch default chunk size configuration
+        axios.get('/api/v1/config/embedder')
+            .then(res => {
+                if (res.data.default_chunk_size) {
+                    setChunkSize(res.data.default_chunk_size)
+                }
+            })
+            .catch(err => console.error("Failed to load global config", err))
     }, [])
 
     const handlePreview = async (e) => {
@@ -76,7 +85,7 @@ export default function IngestDocumentStep() {
     return (
         <section className="step-section">
             <div className="section-header">
-                <h2>3. Ingest Documents</h2>
+                <h2>5. Ingest Documents</h2>
                 <span className="api-badge post">POST /api/v1/documents</span>
             </div>
             <div className="glass-card">
@@ -102,7 +111,6 @@ export default function IngestDocumentStep() {
                         <input
                             type="number"
                             min="10"
-                            max="2000"
                             value={chunkSize}
                             onChange={e => setChunkSize(parseInt(e.target.value))}
                             required
@@ -112,14 +120,29 @@ export default function IngestDocumentStep() {
 
                     <div className="form-group">
                         <label>PDF Document</label>
-                        <input
-                            type="file"
-                            accept="application/pdf"
-                            onChange={e => setPdfFile(e.target.files[0])}
-                            required
-                            style={{ background: 'rgba(0,0,0,0.1)', cursor: 'pointer', padding: '32px 16px', borderStyle: 'dashed', textAlign: 'center' }}
-                        />
-                        {pdfFile && <span style={{ display: 'block', marginTop: '8px', color: 'var(--accent-primary)', fontWeight: 500 }}>Selected: {pdfFile.name}</span>}
+                        <div style={{ position: 'relative', overflow: 'hidden', display: 'inline-block', width: '100%' }}>
+                            <label
+                                htmlFor="file-upload"
+                                style={{ display: 'block', textAlign: 'center', padding: '32px', border: '2px dashed var(--panel-border)', background: 'rgba(0,0,0,0.2)', cursor: 'pointer', borderRadius: '8px', transition: 'border-color 0.2s' }}
+                                onMouseOver={(e) => e.currentTarget.style.borderColor = 'var(--accent-primary)'}
+                                onMouseOut={(e) => e.currentTarget.style.borderColor = 'var(--panel-border)'}
+                            >
+                                <span style={{ fontSize: '24px', display: 'block', marginBottom: '8px' }}>📄</span>
+                                {pdfFile ? (
+                                    <strong style={{ color: 'var(--accent-primary)' }}>Selected: {pdfFile.name}</strong>
+                                ) : (
+                                    <span style={{ color: 'var(--text-secondary)' }}>Click to Browse or Drag & Drop PDF here</span>
+                                )}
+                            </label>
+                            <input
+                                id="file-upload"
+                                type="file"
+                                accept="application/pdf"
+                                onChange={e => setPdfFile(e.target.files[0])}
+                                required
+                                style={{ display: 'none' }}
+                            />
+                        </div>
                     </div>
 
                     <div>

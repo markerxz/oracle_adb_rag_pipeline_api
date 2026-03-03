@@ -79,7 +79,7 @@ export default function KnowledgeBaseStep() {
     return (
         <section className="step-section">
             <div className="section-header">
-                <h2>2. Setup Knowledge Base</h2>
+                <h2>4. Setup Knowledge Base</h2>
                 <span className="api-badge post">POST /api/v1/kbs</span>
             </div>
             <div className="glass-card">
@@ -141,7 +141,11 @@ export default function KnowledgeBaseStep() {
                                         {kb.chunk_count} Vector Chunks
                                     </div>
                                 </div>
-                                <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px' }}>{kb.description}</div>
+                                <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px' }}>{kb.description}</div>
+                                <div style={{ fontSize: '12px', color: 'var(--accent-secondary)', marginBottom: '8px' }}>
+                                    <span style={{ opacity: 0.7 }}>Native Embedder: </span>
+                                    {kb.embedding_model}
+                                </div>
                                 <code style={{ fontSize: '11px', opacity: 0.5, display: 'block', marginBottom: kb.documents?.length > 0 ? '16px' : '0' }}>KB ID: {kb.id}</code>
 
                                 {kb.documents && kb.documents.length > 0 && (
