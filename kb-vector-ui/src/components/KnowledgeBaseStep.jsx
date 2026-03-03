@@ -11,6 +11,8 @@ export default function KnowledgeBaseStep() {
     const [fetchResponse, setFetchResponse] = useState(null)
     const [docToDelete, setDocToDelete] = useState(null)
     const [deleteLoading, setDeleteLoading] = useState(false)
+    const [kbToDelete, setKbToDelete] = useState(null)
+    const [deleteKbLoading, setDeleteKbLoading] = useState(false)
     const [docToView, setDocToView] = useState(null)
     const [chunksLoading, setChunksLoading] = useState(false)
     const [docChunks, setDocChunks] = useState([])
@@ -59,6 +61,20 @@ export default function KnowledgeBaseStep() {
             alert("Failed to delete document: " + (err.response?.data?.detail || err.message))
         } finally {
             setDeleteLoading(false)
+        }
+    }
+
+    const confirmDeleteKb = async () => {
+        if (!kbToDelete) return;
+        setDeleteKbLoading(true)
+        try {
+            await axios.delete(`/api/v1/kbs/${kbToDelete.id}`)
+            setKbToDelete(null)
+            fetchKbs()
+        } catch (err) {
+            alert("Failed to delete Knowledge Base: " + (err.response?.data?.detail || err.message))
+        } finally {
+            setDeleteKbLoading(false)
         }
     }
 
@@ -137,8 +153,11 @@ export default function KnowledgeBaseStep() {
                             <li key={kb.id} style={{ padding: '16px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--panel-border)', borderRadius: '8px' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
                                     <div style={{ fontWeight: 600, color: 'var(--accent-primary)' }}>{kb.name}</div>
-                                    <div style={{ fontSize: '11px', background: 'rgba(255,255,255,0.1)', padding: '2px 8px', borderRadius: '12px' }}>
-                                        {kb.chunk_count} Vector Chunks
+                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                        <div style={{ fontSize: '11px', background: 'rgba(255,255,255,0.1)', padding: '2px 8px', borderRadius: '12px' }}>
+                                            {kb.chunk_count} Vector Chunks
+                                        </div>
+                                        <button type="button" onClick={() => setKbToDelete(kb)} style={{ fontSize: '11px', padding: '4px 10px', background: 'rgba(220, 53, 69, 0.8)', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', transition: 'background 0.2s' }}>Delete KB</button>
                                     </div>
                                 </div>
                                 <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px' }}>{kb.description}</div>
@@ -201,6 +220,32 @@ export default function KnowledgeBaseStep() {
                             <button type="button" className="btn" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }} onClick={() => setDocToDelete(null)} disabled={deleteLoading}>Cancel</button>
                             <button type="button" className="btn" style={{ background: 'var(--accent-error)', color: 'white', border: 'none' }} onClick={confirmDelete} disabled={deleteLoading}>
                                 {deleteLoading ? <span className="loader" style={{ width: 20, height: 20 }} /> : 'Permanently Delete'}
+                            </button>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
+
+            {/* Delete KB Confirmation Modal */}
+            {kbToDelete && createPortal(
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)', zIndex: 9999, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                    <div className="glass-card" style={{ maxWidth: '450px', width: '90%', padding: '32px', border: '1px solid rgba(220, 53, 69, 0.4)', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }}>
+                        <h3 style={{ color: 'var(--text-primary)', marginBottom: '16px', fontSize: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ color: 'var(--accent-error)' }}>⚠️</span> Confirm Deletion
+                        </h3>
+                        <div style={{ marginBottom: '16px' }}>
+                            <span className="api-badge delete">DELETE /api/v1/kbs/{kbToDelete.id}</span>
+                        </div>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '15px', marginBottom: '24px', lineHeight: 1.6 }}>
+                            Are you sure you want to permanently delete <strong style={{ color: 'var(--accent-secondary)' }}>{kbToDelete.name}</strong>?
+                            <br /><br />
+                            This will irrevocably destroy the Knowledge Base, cascade delete all associated vector chunks from the database, and permanently wipe all original PDF files from OCI Object Storage.
+                        </p>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+                            <button type="button" className="btn" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }} onClick={() => setKbToDelete(null)} disabled={deleteKbLoading}>Cancel</button>
+                            <button type="button" className="btn" style={{ background: 'var(--accent-error)', color: 'white', border: 'none' }} onClick={confirmDeleteKb} disabled={deleteKbLoading}>
+                                {deleteKbLoading ? <span className="loader" style={{ width: 20, height: 20 }} /> : 'Permanently Delete'}
                             </button>
                         </div>
                     </div>
